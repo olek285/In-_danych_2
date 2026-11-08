@@ -26,7 +26,7 @@ def make_response(
 class FakeSession:
     """Returns (or raises) the scripted outcomes in order and records calls."""
 
-    def __init__(self, outcomes: Iterable[requests.Response | Exception]) -> None:
+    def __init__(self, outcomes: Iterable[requests.Response | BaseException]) -> None:
         self.outcomes = list(outcomes)
         self.calls: list[dict[str, Any]] = []
         self.headers: dict[str, str] = {}
@@ -36,7 +36,7 @@ class FakeSession:
         if not self.outcomes:
             raise AssertionError(f"unexpected extra request to {url}")
         outcome = self.outcomes.pop(0)
-        if isinstance(outcome, Exception):
+        if isinstance(outcome, BaseException):
             raise outcome
         if outcome.url == "https://example.test/x":
             outcome.url = url

@@ -1,1 +1,13 @@
-krs
+krs,note
+0000635012,sp. z o.o.; foreign corporate shareholder (KRS placeholder 0000000000)
+0000126258,sp. z o.o.; shareholder is a Polish S.A. with KRS
+0000216932,sp. z o.o.; shareholder listed under the parent's former name
+0000035335,sp. z o.o.; shareholder is a Polish S.A. with KRS
+0000492780,sp. z o.o.; shareholder is a Polish S.A. with KRS (chain to 0000065743)
+0000065743,S.A.; parent of 0000492780
+0000028860,S.A.; large listed company (parent of several watchlist entries)
+0000026438,S.A.; bank
+0000086269,S.A.; sole shareholder is a foreign company
+0000060644,sp. z o.o. in liquidation
+0000561552,sp. z o.o. in liquidation; past suspension of activity
+0000558545,sp. z o.o. in liquidation
