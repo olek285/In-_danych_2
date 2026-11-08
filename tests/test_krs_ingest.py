@@ -42,6 +42,7 @@ def test_stores_200_and_404_and_reports_400(tmp_path):
     assert stored["0009999999"]["http_status"] == 404
     assert "J***" not in stored["0000000001"]["payload"]  # redacted before writing
     assert stored["0000000001"]["redacted_values"] == 1
+    assert stored["0000000001"]["content_type"] == "application/json"
 
 
 def test_second_run_same_day_uses_bronze_instead_of_api(tmp_path):

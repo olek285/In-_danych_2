@@ -68,7 +68,10 @@ def ingest_krs(
                 continue
             payload, redacted = redact_krs_payload(result.text)
             envelopes.append(
-                make_envelope(source, krs, result.url, result.status, payload, redacted_values=redacted)
+                make_envelope(
+                    source, krs, result.url, result.status, payload,
+                    content_type=result.content_type, redacted_values=redacted,
+                )
             )
             report.statuses[result.status] += 1
             if result.status == 404:

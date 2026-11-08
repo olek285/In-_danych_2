@@ -133,7 +133,7 @@ def ingest_vat(
         payload, redacted = redact_vat_payload(result.text)
         envelope = make_envelope(
             SOURCE, key, result.url, result.status, payload,
-            query_date=as_of.isoformat(), redacted_values=redacted,
+            query_date=as_of.isoformat(), content_type=result.content_type, redacted_values=redacted,
         )
         # one part file per request: a quota-limited answer must never be lost
         report.written.append(store.write_part(SOURCE, [envelope], day))
