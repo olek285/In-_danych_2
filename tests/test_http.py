@@ -141,3 +141,19 @@ def test_download_detects_truncated_transfer(tmp_path):
         client.download("https://example.test/file.csv", dest)
     assert not dest.exists()
     assert list(tmp_path.iterdir()) == []
+
+
+def test_parse_json_payload_names_the_problem():
+    from kyb.http import InvalidPayloadError, parse_json_payload
+
+    assert parse_json_payload('{"result": 1}', ["result"]) == {"result": 1}
+    with pytest.raises(InvalidPayloadError, match="HTML/WAF"):
+        parse_json_payload("<html>Request unsuccessful</html>")
+    with pytest.raises(InvalidPayloadError, match="misses expected key"):
+        parse_json_payload('{"other": 1}', ["result"])
+
+
+def test_client_sends_json_accept_header_and_project_user_agent():
+    client, session, _ = client_with([], user_agent="kyb-test/1.0")
+    assert session.headers["User-Agent"] == "kyb-test/1.0"
+    assert session.headers["Accept"].startswith("application/json")

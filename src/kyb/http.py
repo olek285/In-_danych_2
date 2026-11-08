@@ -13,6 +13,7 @@ Policy:
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import time
 from collections.abc import Callable, Collection, Mapping
@@ -57,6 +58,15 @@ class IncompleteDownloadError(HttpError):
     """Fewer bytes were received than the server announced."""
 
 
+class InvalidPayloadError(HttpError):
+    """The status looks fine but the body is not what the API returns.
+
+    Seen live: the VAT White List answers HTTP 200 with an HTML bot-protection
+    page (Imperva Incapsula) when it blocks a client. Such a body must not be
+    treated - or cached - as a valid answer.
+    """
+
+
 @dataclass(frozen=True)
 class HttpResult:
     url: str
@@ -65,6 +75,27 @@ class HttpResult:
     content_type: str
     attempts: int
     elapsed_s: float
+
+
+def parse_json_payload(text: str, required_keys: Collection[str] = ()) -> Any:
+    """Parse an API body; raise InvalidPayloadError unless it is JSON with the keys."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        hint = " (looks like an HTML/WAF page)" if text.lstrip().lower().startswith("<") else ""
+        raise InvalidPayloadError(f"expected JSON{hint}: {text[:200]!r}") from None
+    missing = [k for k in required_keys if not (isinstance(data, dict) and k in data)]
+    if missing:
+        raise InvalidPayloadError(f"JSON body misses expected key(s) {missing}: {text[:200]!r}")
+    return data
+
+
+def ensure_json(result: HttpResult, required_keys: Collection[str] = ()) -> Any:
+    """Validate an HttpResult body (see parse_json_payload), naming the URL on failure."""
+    try:
+        return parse_json_payload(result.text, required_keys)
+    except InvalidPayloadError as exc:
+        raise InvalidPayloadError(f"HTTP {result.status} for {result.url}: {exc}") from None
 
 
 @dataclass(frozen=True)
@@ -104,7 +135,8 @@ class HttpClient:
         self.backoff_base = backoff_base
         self.max_backoff = max_backoff
         self.session = session or requests.Session()
-        self.session.headers.setdefault("User-Agent", user_agent)
+        self.session.headers["User-Agent"] = user_agent
+        self.session.headers["Accept"] = "application/json, text/csv;q=0.9, */*;q=0.5"
         self.sleep = sleep
 
     @classmethod

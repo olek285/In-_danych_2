@@ -14,7 +14,7 @@ from collections.abc import Callable, Iterable
 from datetime import date
 
 from kyb.config import local_today
-from kyb.http import HttpClient, HttpError
+from kyb.http import HttpClient, HttpError, ensure_json
 from kyb.ingestion.report import IngestReport
 from kyb.pii import redact_krs_payload
 from kyb.storage import BronzeStore, make_envelope
@@ -60,6 +60,8 @@ def ingest_krs(
             url = f"{base_url.rstrip('/')}/{endpoint}/{krs}"
             try:
                 result = client.get(url, params={"rejestr": register, "format": "json"})
+                # a 200 must be an extract; a 404 must still be the API's own JSON error
+                ensure_json(result, required_keys=("odpis",) if result.status == 200 else ())
             except HttpError as exc:
                 log.error("KRS %s: %s", krs, exc)
                 report.failed[krs] = str(exc)

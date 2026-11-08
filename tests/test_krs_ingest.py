@@ -81,3 +81,11 @@ def test_read_watchlist_dedupes_and_skips_blank_lines(tmp_path):
     path.write_text("number\n1\n", encoding="utf-8")
     with pytest.raises(ValueError, match="missing 'krs' column"):
         read_watchlist(path)
+
+
+def test_200_without_extract_is_rejected(tmp_path):
+    store = BronzeStore(tmp_path)
+    report, _ = run(store, [make_response(200, "<html>blocked</html>", headers={"Content-Type": "text/html"}),
+                            make_response(200, '{"unexpected": true}')], ["0000000001", "0000000002"])
+    assert set(report.failed) == {"0000000001", "0000000002"}
+    assert store.latest_by_key("krs_current", DAY) == {}
