@@ -104,8 +104,8 @@ Obserwacje na 12 spółkach:
 - REGON ma inne formaty (KRS: 14 cyfr, VAT: 9 cyfr), więc w warstwie silver trzeba go znormalizować.
 
 **Zabezpieczenie przed WAF (NOWE):** API stoi za Imperva Incapsula. Z chmurowego adresu IP dostaliśmy **HTTP 200 z
-HTML-em („Request unsuccessful. Incapsula incident ID…”) zamiast JSON-a** w 2 z 3 zapytań. Za pierwszym razem szło domyślne
-`User-Agent: python-requests/…`, a za trzecim już nasz identyfikujący się nagłówek, więc przyczyny nie da się przypisać
+HTML-em („Request unsuccessful. Incapsula incident ID…”) zamiast JSON-a** w 3 z 4 zapytań. Za pierwszym razem szło domyślne
+`User-Agent: python-requests/…`, a za trzecim i czwartym już nasz identyfikujący się nagłówek (ten sam, z którym przeszło drugie), więc przyczyny nie da się przypisać
 wyłącznie nagłówkowi (najpewniej chodzi o reputację adresu IP lub ocenę ruchu jako bota). Konsekwencje w kodzie:
 odpowiedź 200 bez klucza `result` jest błędem (`InvalidPayloadError`). Nie zapisujemy jej jako poprawnej, nie traktujemy jako
 cache, a przebieg kończy się kodem 1. Każda próba liczy się do limitu. Nie próbujemy obchodzić tego zabezpieczenia
