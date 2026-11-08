@@ -28,6 +28,7 @@ sources:
     batch_size: 30                 # API maximum NIPs per search request
     daily_search_limit: 100        # API hard limit; IP is blocked until midnight when exceeded
     safety_margin: 5               # we stop at limit - margin
+    max_retries: 1                 # each retry is another counted request
 
   opensanctions:
     base_url: "https://data.opensanctions.org/datasets/latest"
