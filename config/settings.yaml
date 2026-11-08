@@ -1,0 +1,39 @@
+# Central configuration: source endpoints, limits and paths.
+# Paths are relative to the repository root (overridable via KYB_DATA_DIR).
+
+paths:
+  data_dir: data
+  bronze: bronze
+  silver: silver
+  gold: gold
+  quality: quality
+  state: state            # quota counters and other run state
+  watchlist: config/watchlist.csv
+
+http:
+  timeout_seconds: 30
+  max_retries: 4          # retries for network errors and 5xx / 429
+  backoff_base_seconds: 2 # 2, 4, 8, 16 ...
+  user_agent: "kyb-screening-student-project/0.1 (+educational, non-commercial)"
+
+sources:
+  krs:
+    base_url: "https://api-krs.ms.gov.pl/api/krs"
+    endpoint: "OdpisAktualny"      # alternative: OdpisPelny
+    register: "P"                  # P = register of entrepreneurs
+    min_interval_seconds: 1.0      # politeness delay between requests
+
+  vat:
+    base_url: "https://wl-api.mf.gov.pl/api/search/nips"
+    batch_size: 30                 # API maximum NIPs per search request
+    daily_search_limit: 100        # API hard limit; IP is blocked until midnight when exceeded
+    safety_margin: 5               # we stop at limit - margin
+
+  opensanctions:
+    base_url: "https://data.opensanctions.org/datasets/latest"
+    file: "targets.simple.csv"
+    datasets:
+      - pl_mswia_sanctions
+      - pl_finanse_sanctions
+      - us_ofac_sdn
+      - eu_fsf

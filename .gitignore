@@ -1,0 +1,20 @@
+# Data lake (bronze/silver/gold/quality/state) is never committed
+data/
+
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
