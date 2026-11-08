@@ -157,3 +157,29 @@ def test_client_sends_json_accept_header_and_project_user_agent():
     client, session, _ = client_with([], user_agent="kyb-test/1.0")
     assert session.headers["User-Agent"] == "kyb-test/1.0"
     assert session.headers["Accept"].startswith("application/json")
+
+
+def test_stream_verifies_published_checksum_and_retries(tmp_path):
+    import hashlib
+
+    good = b"id,schema,name\n"
+    client, session, sleeps = client_with(
+        [make_response(200, b"id,schema,nam3\n"), make_response(200, good)], max_retries=1
+    )
+    dest = tmp_path / "f.csv"
+    result = client.download("https://example.test/f.csv", dest, expected_sha1=hashlib.sha1(good).hexdigest())
+    assert dest.read_bytes() == good and result.attempts == 2  # corrupted first transfer discarded
+    assert result.sha1 == hashlib.sha1(good).hexdigest()
+
+
+def test_stream_gives_up_on_persistent_checksum_mismatch(tmp_path):
+    client, session, sleeps = client_with([make_response(200, b"x")] * 2, max_retries=1)
+    with pytest.raises(SourceUnavailableError, match="differs from published"):
+        client.download("https://example.test/f.csv", tmp_path / "f.csv", expected_sha1="0" * 40)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_stream_passes_chunks_to_custom_sink():
+    client, session, _ = client_with([make_response(200, b"a\nb\n")])
+    result = client.stream("https://example.test/f", lambda chunks: b"".join(chunks).count(b"\n"))
+    assert result.value == 2 and result.size_bytes == 4

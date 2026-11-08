@@ -16,7 +16,7 @@ import hashlib
 import json
 import logging
 import time
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -99,14 +99,57 @@ def ensure_json(result: HttpResult, required_keys: Collection[str] = ()) -> Any:
 
 
 @dataclass(frozen=True)
-class DownloadResult:
+class StreamResult:
     url: str
     status: int
-    path: Path
+    value: Any  # whatever the sink returned (e.g. the written path or row counts)
     size_bytes: int
     sha256: str
+    sha1: str
     content_type: str
     attempts: int
+
+
+class ChecksumMismatchError(IncompleteDownloadError):
+    """The received bytes do not match the checksum published by the source."""
+
+
+class _VerifyingChunks:
+    """Yields body chunks while hashing them; checks length and SHA-1 at the end.
+
+    The check fires *inside* the iteration, i.e. while the sink is still
+    consuming, so a sink that writes through ``atomic_open`` discards a
+    truncated or corrupted file instead of committing it.
+    """
+
+    def __init__(self, chunks: Iterable[bytes], url: str, expected_size: int | None, expected_sha1: str | None):
+        self._chunks = chunks
+        self.url = url
+        self.expected_size = expected_size
+        self.expected_sha1 = expected_sha1
+        self.size = 0
+        self.sha256 = hashlib.sha256()
+        self.sha1 = hashlib.sha1()  # noqa: S324 - integrity check against the published SHA-1
+        self.finished = False
+        self._gen = self._run()
+
+    def __iter__(self) -> Iterator[bytes]:
+        return self._gen
+
+    def _run(self) -> Iterator[bytes]:
+        for chunk in self._chunks:
+            if chunk:
+                self.size += len(chunk)
+                self.sha256.update(chunk)
+                self.sha1.update(chunk)
+                yield chunk
+        if self.expected_size is not None and self.size != self.expected_size:
+            raise IncompleteDownloadError(f"{self.url}: got {self.size} of {self.expected_size} bytes")
+        if self.expected_sha1 and self.sha1.hexdigest() != self.expected_sha1:
+            raise ChecksumMismatchError(
+                f"{self.url}: SHA-1 {self.sha1.hexdigest()} differs from published {self.expected_sha1}"
+            )
+        self.finished = True
 
 
 def _decode(response: requests.Response) -> str:
@@ -213,15 +256,20 @@ class HttpClient:
                 continue
             raise UnexpectedStatusError(response.url, status, _decode(response))
 
-    def download(
+    def stream(
         self,
         url: str,
-        dest: Path,
+        sink: Callable[[Iterable[bytes]], Any],
         *,
+        expected_sha1: str | None = None,
         retry_statuses: Collection[int] = DEFAULT_RETRY_STATUSES,
         chunk_size: int = 1 << 20,
-    ) -> DownloadResult:
-        """Stream a (large) file to ``dest`` atomically, computing its SHA-256."""
+    ) -> StreamResult:
+        """GET a large body and pass its chunks to ``sink`` without buffering it.
+
+        Transfer errors, truncation and checksum mismatches restart the whole
+        transfer (the sink is called again), so sinks must write atomically.
+        """
         attempt = 0
         while True:
             attempt += 1
@@ -236,26 +284,36 @@ class HttpClient:
                         continue
                     if status != 200:
                         raise UnexpectedStatusError(response.url, status, _decode(response))
-                    digest = hashlib.sha256()
-                    size = 0
-                    with atomic_open(dest, "wb") as fh:
-                        for chunk in response.iter_content(chunk_size=chunk_size):
-                            fh.write(chunk)
-                            digest.update(chunk)
-                            size += len(chunk)
-                        expected = response.headers.get("Content-Length")
-                        # with Content-Encoding the announced length is the compressed size
-                        if expected and not response.headers.get("Content-Encoding") and int(expected) != size:
-                            raise IncompleteDownloadError(f"{url}: got {size} of {expected} bytes")
-                    log.info("DOWNLOAD %s -> %s (%d B)", response.url, dest, size)
-                    return DownloadResult(
+                    length = response.headers.get("Content-Length")
+                    # with Content-Encoding the announced length is the compressed size
+                    expected_size = int(length) if length and not response.headers.get("Content-Encoding") else None
+                    chunks = _VerifyingChunks(
+                        response.iter_content(chunk_size=chunk_size), response.url, expected_size, expected_sha1
+                    )
+                    value = sink(chunks)
+                    if not chunks.finished:
+                        raise RuntimeError(f"sink for {url} did not consume the whole body")
+                    log.info("STREAM %s -> %d (%d B)", response.url, status, chunks.size)
+                    return StreamResult(
                         url=response.url,
                         status=status,
-                        path=dest,
-                        size_bytes=size,
-                        sha256=digest.hexdigest(),
+                        value=value,
+                        size_bytes=chunks.size,
+                        sha256=chunks.sha256.hexdigest(),
+                        sha1=chunks.sha1.hexdigest(),
                         content_type=response.headers.get("Content-Type", ""),
                         attempts=attempt,
                     )
             except (*NETWORK_ERRORS, IncompleteDownloadError) as exc:
                 self._wait_or_raise(url, attempt, self.max_retries, f"transfer error: {exc}")
+
+    def download(self, url: str, dest: Path, **kwargs: Any) -> StreamResult:
+        """Stream a (large) file to ``dest`` atomically; ``value`` is the path."""
+
+        def write(chunks: Iterable[bytes]) -> Path:
+            with atomic_open(dest, "wb") as fh:
+                for chunk in chunks:
+                    fh.write(chunk)
+            return dest
+
+        return self.stream(url, write, **kwargs)
