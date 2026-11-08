@@ -34,7 +34,9 @@ sources:
     base_url: "https://data.opensanctions.org/datasets/latest"
     file: "targets.simple.csv"
     datasets:
-      - pl_mswia_sanctions
-      - pl_finanse_sanctions
-      - us_ofac_sdn
-      - eu_fsf
+      - pl_mswia_sanctions     # Polish MSWiA sanctions list
+      - pl_finanse_sanctions   # Polish GIIF (AML/CFT) list
+      - us_ofac_sdn            # US OFAC SDN list
+      - eu_fsf                 # EU Financial Sanctions Files (consolidated list)
+    # Only legal entities are stored; natural persons are dropped while streaming
+    keep_schemas: [Company, Organization, LegalEntity, PublicBody]

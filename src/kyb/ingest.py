@@ -14,6 +14,7 @@ from kyb.config import Settings, load_settings
 from kyb.http import HttpClient
 from kyb.ingestion.krs import SOURCE_BY_ENDPOINT, ingest_krs
 from kyb.ingestion.report import IngestReport
+from kyb.ingestion.sanctions import DEFAULT_KEEP_SCHEMAS, ingest_sanctions
 from kyb.ingestion.vat import ingest_vat, nips_from_krs_bronze
 from kyb.logging_setup import setup_logging
 from kyb.nip import is_valid_nip, normalize_nip
@@ -87,6 +88,20 @@ def cmd_vat(args: argparse.Namespace, settings: Settings) -> list[IngestReport]:
     return [report]
 
 
+def cmd_sanctions(args: argparse.Namespace, settings: Settings) -> list[IngestReport]:
+    cfg = settings.source("opensanctions")
+    report = ingest_sanctions(
+        args.dataset or cfg["datasets"],
+        client=HttpClient.from_settings(settings.http, timeout=120),
+        bronze_root=settings.bronze_dir,
+        base_url=cfg["base_url"],
+        file_name=cfg.get("file", "targets.simple.csv"),
+        keep_schemas=frozenset(cfg.get("keep_schemas") or DEFAULT_KEEP_SCHEMAS),
+        force=args.force,
+    )
+    return [report]
+
+
 def cmd_quota(args: argparse.Namespace, settings: Settings) -> list[IngestReport]:
     print(f"VAT White List quota - {vat_quota(settings).status()}")
     return []
@@ -109,6 +124,11 @@ def build_parser() -> argparse.ArgumentParser:
     vat.add_argument("--nip", nargs="+", metavar="NIP", help="query these NIPs instead of the KRS ones")
     vat.add_argument("--force", action="store_true", help="re-query NIPs already answered for that date")
     vat.set_defaults(func=cmd_vat)
+
+    sanctions = sub.add_parser("sanctions", help="OpenSanctions lists (entities only) - new versions only")
+    sanctions.add_argument("--dataset", nargs="+", help="dataset names (default: settings.yaml)")
+    sanctions.add_argument("--force", action="store_true", help="download even if this version is stored")
+    sanctions.set_defaults(func=cmd_sanctions)
 
     quota = sub.add_parser("quota", help="show today's VAT White List request counter")
     quota.set_defaults(func=cmd_quota)
